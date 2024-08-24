@@ -34,7 +34,6 @@ def options_chain(ticker):
 
 def monte_carlo(ticker):
     # implemented from https://www.investopedia.com/terms/m/montecarlosimulation.asp
-    
     options = options_chain(ticker)
     totDailyReturns = []
     for i in range(len(options['mark']) - 1):
@@ -53,5 +52,3 @@ def monte_carlo(ticker):
         simulations.append(price)
 
     return statistics.fmean(simulations)
-
-print(monte_carlo("GOOGL"))
