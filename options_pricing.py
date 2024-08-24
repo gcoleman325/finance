@@ -52,3 +52,33 @@ def monte_carlo(ticker):
         simulations.append(price)
 
     return statistics.fmean(simulations)
+
+def black_scholes(ticker, t):
+    # implemented from https://intrinio.com/blog/how-the-black-scholes-option-pricing-model-works-its-benefits
+    current_price = yf.Ticker(ticker).info['currentPrice']
+    options = options_chain(ticker)
+    strike = options['strike'].iloc[-1]
+
+    totDailyReturns = []
+    for i in range(len(options['mark']) - 1):
+        if options['mark'][i] > 0 and options['mark'][i+1] > 0:
+            totDailyReturns.append(np.log(options['mark'][i+1] / options['mark'][i]))
+    
+    variance = statistics.variance(totDailyReturns)
+    volatility = math.sqrt(variance)
+
+    # risk free rate adapted from https://gist.github.com/ranaroussi/72d0e92bbe31d1514baccf00175049e4
+    risk_free_rate = yf.download("^IRX")['Adj Close'].iloc[-1] / 100
+    r = (1 + risk_free_rate) ** (1/365) - 1
+
+    d_1 = (np.log(current_price / strike) + (r + (variance / 2)) * t) / (volatility * math.sqrt(t))
+    d_2 = d_1 - (volatility * math.sqrt(t))
+    
+    call = (current_price * norm.cdf(d_1)) - (strike * math.exp(-r * t) * norm.cdf(d_2))
+    put = (strike * math.exp(-r * t) * norm.cdf(-d_2)) - (current_price * norm.cdf(-d_1))
+
+    return call, put
+
+call, put = black_scholes("GOOGL", 3)
+print(call)
+print(put)
