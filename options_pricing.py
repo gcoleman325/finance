@@ -8,7 +8,6 @@ from scipy.stats import norm
 import random
 
 def options_chain(ticker):
-    # adapted from https://medium.com/@txlian13/webscrapping-options-data-with-python-and-yfinance-e4deb0124613
     ticker = yf.Ticker(ticker)
     exps = ticker.options
     options = pd.DataFrame()
@@ -18,30 +17,31 @@ def options_chain(ticker):
         opt['expirationDate'] = exp
         options = pd.concat([options, opt])
 
-    options['expirationDate'] = pd.to_datetime(options['expirationDate']) + datetime.timedelta(days = 1)
-    options['dte'] = (options['expirationDate'] - pd.to_datetime('today')).dt.days / 365
+    options['expirationDate'] = pd.to_datetime(options['expirationDate']) + pd.Timedelta(days=1)
+    options['dte'] = (options['expirationDate'] - pd.Timestamp.today()).dt.days / 365
     
-    options['CALL'] = options['contractSymbol'].str[4:].apply(
-        lambda x: "C" in x)
+    options['CALL'] = options['contractSymbol'].str[4:].apply(lambda x: "C" in x)
     
     options[['bid', 'ask', 'strike']] = options[['bid', 'ask', 'strike']].apply(pd.to_numeric)
-    options['mark'] = (options['bid'] + options['ask']) / 2 # Calculate the midpoint of the bid-ask
+    options['mark'] = (options['bid'] + options['ask']) / 2
     
-    options = options.drop(columns = ['contractSize', 'currency', 'change', 'percentChange', 'lastTradeDate', 'lastPrice'])
+    options = options.drop(columns=['contractSize', 'currency', 'change', 'percentChange', 'lastTradeDate', 'lastPrice'])
     options = options.reset_index(drop=True)
 
     return options
 
 def monte_carlo(ticker):
-    # implemented from https://www.investopedia.com/terms/m/montecarlosimulation.asp
     options = options_chain(ticker)
     totDailyReturns = []
     for i in range(len(options['mark']) - 1):
         if options['mark'][i] > 0 and options['mark'][i+1] > 0:
             totDailyReturns.append(np.log(options['mark'][i+1] / options['mark'][i]))
     
+    if len(totDailyReturns) == 0:
+        raise ValueError("Not enough valid data for calculating returns.")
+    
     variance = statistics.variance(totDailyReturns)
-    drift = statistics.fmean(totDailyReturns) * (variance/2)
+    drift = statistics.fmean(totDailyReturns) - (variance / 2)
     
     last_price = options['mark'].iloc[-1]
 
@@ -54,8 +54,12 @@ def monte_carlo(ticker):
     return statistics.fmean(simulations)
 
 def black_scholes(ticker, t):
-    # implemented from https://intrinio.com/blog/how-the-black-scholes-option-pricing-model-works-its-benefits
-    current_price = yf.Ticker(ticker).info['currentPrice']
+    ticker_data = yf.Ticker(ticker).info
+    current_price = ticker_data.get('currentPrice', None)
+    
+    if current_price is None:
+        raise ValueError("Current price data not available.")
+    
     options = options_chain(ticker)
     strike = options['strike'].iloc[-1]
 
@@ -64,12 +68,19 @@ def black_scholes(ticker, t):
         if options['mark'][i] > 0 and options['mark'][i+1] > 0:
             totDailyReturns.append(np.log(options['mark'][i+1] / options['mark'][i]))
     
+    if len(totDailyReturns) == 0:
+        raise ValueError("Not enough valid data for calculating returns.")
+    
     variance = statistics.variance(totDailyReturns)
-    volatility = math.sqrt(variance)
+    volatility = math.sqrt(variance) * math.sqrt(252) 
 
-    # risk free rate adapted from https://gist.github.com/ranaroussi/72d0e92bbe31d1514baccf00175049e4
-    risk_free_rate = yf.download("^IRX")['Adj Close'].iloc[-1] / 100
-    r = (1 + risk_free_rate) ** (1/365) - 1
+    risk_free_data = yf.download("^IRX")
+    
+    if risk_free_data.empty:
+        raise ValueError("Risk-free rate data not available.")
+    
+    risk_free_rate = risk_free_data['Adj Close'].iloc[-1] / 100
+    r = (1 + risk_free_rate) ** (1/252) - 1
 
     d_1 = (np.log(current_price / strike) + (r + (variance / 2)) * t) / (volatility * math.sqrt(t))
     d_2 = d_1 - (volatility * math.sqrt(t))
@@ -80,5 +91,5 @@ def black_scholes(ticker, t):
     return call, put
 
 call, put = black_scholes("GOOGL", 3)
-print(call)
-print(put)
+print(f"Call: {call}, Put: {put}")
+print(monte_carlo("GOOGL"))
