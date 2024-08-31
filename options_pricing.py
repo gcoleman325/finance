@@ -46,7 +46,7 @@ def monte_carlo(ticker):
     last_price = options['mark'].iloc[-1]
 
     simulations = []
-    for i in range(10000):
+    for i in range(1000000):
         random_value = math.sqrt(variance) * norm.ppf(random.random())
         price = last_price * math.exp(drift + random_value)
         simulations.append(price)
@@ -72,15 +72,15 @@ def black_scholes(ticker, t):
         raise ValueError("Not enough valid data for calculating returns.")
     
     variance = statistics.variance(totDailyReturns)
-    volatility = math.sqrt(variance) * math.sqrt(252) 
+    volatility = math.sqrt(variance) * math.sqrt(365) 
 
-    risk_free_data = yf.download("^IRX")
+    risk_free_data = yf.download("^IRX", period = "1d")
     
     if risk_free_data.empty:
         raise ValueError("Risk-free rate data not available.")
     
     risk_free_rate = risk_free_data['Adj Close'].iloc[-1] / 100
-    r = (1 + risk_free_rate) ** (1/252) - 1
+    r = (1 + risk_free_rate) ** (1/365) - 1
 
     d_1 = (np.log(current_price / strike) + (r + (variance / 2)) * t) / (volatility * math.sqrt(t))
     d_2 = d_1 - (volatility * math.sqrt(t))
