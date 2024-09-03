@@ -37,16 +37,13 @@ def monte_carlo(ticker):
         if options['mark'][i] > 0 and options['mark'][i+1] > 0:
             totDailyReturns.append(np.log(options['mark'][i+1] / options['mark'][i]))
     
-    if len(totDailyReturns) == 0:
-        raise ValueError("Not enough valid data for calculating returns.")
-    
     variance = statistics.variance(totDailyReturns)
     drift = statistics.fmean(totDailyReturns) - (variance / 2)
     
     last_price = options['mark'].iloc[-1]
 
     simulations = []
-    for i in range(1000000):
+    for i in range(10000):
         random_value = math.sqrt(variance) * norm.ppf(random.random())
         price = last_price * math.exp(drift + random_value)
         simulations.append(price)
@@ -55,10 +52,7 @@ def monte_carlo(ticker):
 
 def black_scholes(ticker, t):
     ticker_data = yf.Ticker(ticker).info
-    current_price = ticker_data.get('currentPrice', None)
-    
-    if current_price is None:
-        raise ValueError("Current price data not available.")
+    current_price = ticker_data.get('currentPrice')
     
     options = options_chain(ticker)
     strike = options['strike'].iloc[-1]
@@ -68,17 +62,10 @@ def black_scholes(ticker, t):
         if options['mark'][i] > 0 and options['mark'][i+1] > 0:
             totDailyReturns.append(np.log(options['mark'][i+1] / options['mark'][i]))
     
-    if len(totDailyReturns) == 0:
-        raise ValueError("Not enough valid data for calculating returns.")
-    
     variance = statistics.variance(totDailyReturns)
     volatility = math.sqrt(variance) * math.sqrt(365) 
 
-    risk_free_data = yf.download("^IRX", period = "1d")
-    
-    if risk_free_data.empty:
-        raise ValueError("Risk-free rate data not available.")
-    
+    risk_free_data = yf.download("^IRX")
     risk_free_rate = risk_free_data['Adj Close'].iloc[-1] / 100
     r = (1 + risk_free_rate) ** (1/365) - 1
 
@@ -89,6 +76,31 @@ def black_scholes(ticker, t):
     put = (strike * math.exp(-r * t) * norm.cdf(-d_2)) - (current_price * norm.cdf(-d_1))
 
     return call, put
+
+def binomial(ticker, time):
+    # implemented from https://www.investopedia.com/terms/b/binomialoptionpricing.asp
+    t = time
+
+    ticker_data = yf.download(ticker)
+    s0 = ticker_data.info.get('currentPrice')
+
+    risk_free_data = yf.download("^IRX")
+    risk_free_rate = risk_free_data['Adj Close'].iloc[-1] / 100
+    r = (1 + risk_free_rate) ** (1/365) - 1
+
+    options = options_chain(ticker)
+    k = options['strike'].iloc[-1]
+
+    totDailyReturns = []
+    for i in range(len(options['mark']) - 1):
+        if options['mark'][i] > 0 and options['mark'][i+1] > 0:
+            totDailyReturns.append(np.log(options['mark'][i+1] / options['mark'][i]))
+    variance = statistics.variance(totDailyReturns)
+    sigma = math.sqrt(variance) * math.sqrt(365) 
+
+    
+
+
 
 call, put = black_scholes("GOOGL", 3)
 print(f"Call: {call}, Put: {put}")
